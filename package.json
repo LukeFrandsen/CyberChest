@@ -1,15 +1,23 @@
 {
-  "name": "cyberdesk",
+  "name": "cyberchest",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "main.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "electron .",
+    "postinstall": "electron-rebuild -f -w node-pty",
+    "rebuild": "electron-rebuild -f -w node-pty"
   },
   "keywords": [],
-  "author": "",
+  "author": "Luke Frandsen",
   "license": "ISC",
-  "description": "",
+  "description": "Beginner-friendly desktop cybersecurity toolkit.",
+  "dependencies": {
+    "@xterm/xterm": "^5.5.0",
+    "@xterm/addon-fit": "^0.10.0",
+    "node-pty": "^1.1.0"
+  },
   "devDependencies": {
-    "electron": "^44.4.1"
+    "electron": "^44.4.1",
+    "@electron/rebuild": "^4.0.1"
   }
 }

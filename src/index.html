@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+
+  <meta
+    http-equiv="Content-Security-Policy"
+    content="default-src 'self'; style-src 'self' 'unsafe-inline'"
+  >
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  >
+
+  <title>CyberChest</title>
+
+  <link
+    rel="stylesheet"
+    href="../node_modules/@xterm/xterm/css/xterm.css"
+  >
+
+  <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <h1>CyberChest</h1>
+
+      <button class="tool-tab active" data-tool="terminal">
+        Terminal
+      </button>
+
+      <button class="tool-tab" data-tool="nmap">
+        Nmap
+      </button>
+
+      <button class="tool-tab disabled" disabled>
+        More tools later
+      </button>
+    </aside>
+
+    <main class="workspace">
+      <!-- Terminal -->
+      <section
+        id="terminal-workspace"
+        class="tool-workspace active"
+      >
+        <header class="workspace-header">
+          <h2>Terminal</h2>
+          <p>Enter commands and view their output.</p>
+        </header>
+
+        <div class="terminal-toolbar">
+          <span id="terminal-status" role="status">
+            Starting shell…
+          </span>
+
+          <button id="restart-terminal">
+            Restart exited shell
+          </button>
+        </div>
+
+        <div id="terminal-container">
+          <div
+            id="terminal-screen"
+            aria-label="Interactive terminal"
+          ></div>
+        </div>
+      </section>
+
+      <!-- Nmap -->
+      <section id="nmap-workspace" class="tool-workspace">
+        <header class="workspace-header">
+          <h2>Nmap Scanner</h2>
+          <p>Scan an authorized computer or network.</p>
+        </header>
+
+        <div class="scan-controls">
+          <label for="scan-target">Target</label>
+
+          <div class="input-row">
+            <input
+              id="scan-target"
+              type="text"
+              placeholder="Example: 192.168.1.1"
+            >
+
+            <select id="scan-type">
+              <option value="basic">Basic scan</option>
+              <option value="service">Service detection</option>
+              <option value="ports">All ports</option>
+              <option value="operating-system">OS detection</option>
+            </select>
+
+            <button id="scan-button">Run Scan</button>
+          </div>
+        </div>
+
+        <div class="output-panel">
+          <div class="panel-title">Scan Output</div>
+          <pre id="scan-output">CyberChest Nmap output will appear here.</pre>
+        </div>
+      </section>
+    </main>
+
+    <aside class="tree-panel">
+      <!-- Terminal file browser -->
+      <section id="file-tree" class="tree-content active">
+        <h2>File System</h2>
+
+        <p class="tree-help">Computer root: /</p>
+
+        <div class="file-toolbar">
+          <button id="reveal-folder">
+            Show current folder
+          </button>
+
+          <button id="refresh-tree">Refresh</button>
+        </div>
+
+        <label class="tree-help">
+          <input id="show-hidden" type="checkbox">
+          Show hidden files
+        </label>
+
+        <p id="current-folder" class="current-folder"></p>
+
+        <p
+          id="file-status"
+          class="tree-help"
+          role="status"
+        ></p>
+
+        <ul id="computer-tree" class="tree"></ul>
+
+        <p class="tree-help">
+          Expand folders to browse. Use cd in the terminal
+          to change its location.
+        </p>
+      </section>
+
+      <!-- Nmap example tree -->
+      <section id="network-tree" class="tree-content">
+        <h2>Network Map</h2>
+
+        <p class="tree-help">
+          Example data — Nmap is not connected yet.
+        </p>
+
+        <ul class="tree">
+          <li>
+            <span class="tree-folder">▾ Local Network</span>
+
+            <ul>
+              <li>
+                <span class="tree-folder">
+                  ▾ 192.168.1.1
+                </span>
+
+                <ul>
+                  <li>Port 53 — DNS</li>
+                  <li>Port 80 — HTTP</li>
+                </ul>
+              </li>
+
+              <li>
+                <span class="tree-folder">
+                  ▾ 192.168.1.15
+                </span>
+
+                <ul>
+                  <li>Port 22 — SSH</li>
+                  <li>Port 443 — HTTPS</li>
+                </ul>
+              </li>
+            </ul>
+          </li>
+        </ul>
+      </section>
+    </aside>
+  </div>
+
+  <script src="../node_modules/@xterm/xterm/lib/xterm.js"></script>
+  <script src="../node_modules/@xterm/addon-fit/lib/addon-fit.js"></script>
+  <script src="renderer.js"></script>
+</body>
+</html>
