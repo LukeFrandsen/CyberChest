@@ -19,5 +19,13 @@
   "devDependencies": {
     "electron": "^44.4.1",
     "@electron/rebuild": "^4.0.1"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LukeFrandsen/CyberChest.git"
+  },
+  "bugs": {
+    "url": "https://github.com/LukeFrandsen/CyberChest/issues"
+  },
+  "homepage": "https://github.com/LukeFrandsen/CyberChest#readme"
 }

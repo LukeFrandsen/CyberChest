@@ -2,7 +2,7 @@ const { app, BrowserWindow, ipcMain } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs/promises");
 const os = require("node:os");
-const { execFile } = require("node:child_process");
+const { execFile, spawn } = require("node:child_process");
 const { promisify } = require("node:util");
 const { pathToFileURL } = require("node:url");
 
@@ -16,6 +16,61 @@ let session;
 let timer;
 let polling = false;
 let currentDirectory = os.homedir();
+let nmapScan;
+
+const nmapPresets = Object.freeze({
+  basic: [],
+  quick: ["-T4", "-F"],
+  service: ["-sV"],
+  ports: ["-p-"],
+  "operating-system": ["-O"]
+});
+
+function nmapArguments(request) {
+  if (!request || typeof request !== "object") {
+    throw new Error("Invalid scan request.");
+  }
+
+  const target = typeof request.target === "string"
+    ? request.target.trim()
+    : "";
+
+  if (
+    !target ||
+    target.length > 253 ||
+    target.startsWith("-") ||
+    !/^[A-Za-z0-9._:/%-]+$/.test(target)
+  ) {
+    throw new Error(
+      "Enter one hostname, IP address, or CIDR range without spaces."
+    );
+  }
+
+  const preset = nmapPresets[request.preset];
+
+  if (!preset) {
+    throw new Error("Unknown scan preset.");
+  }
+
+  const options = request.options || {};
+  const args = [...preset];
+
+  if (options.skipDiscovery === true) args.push("-Pn");
+  if (options.traceroute === true) args.push("--traceroute");
+  if (options.verbose === true) args.push("-v");
+
+  // The target cannot begin with a dash, so it cannot become an option.
+  args.push(target);
+  return args;
+}
+
+function displayCommand(args) {
+  return ["nmap", ...args]
+    .map((part) => /^[A-Za-z0-9._:/%-]+$/.test(part)
+      ? part
+      : JSON.stringify(part))
+    .join(" ");
+}
 
 // Only accept requests from our own app window.
 function trusted(event) {
@@ -49,6 +104,16 @@ function stopShell() {
     try {
       old.kill();
     } catch {}
+  }
+}
+
+function stopNmap() {
+  const scan = nmapScan;
+  nmapScan = null;
+
+  if (scan && !scan.child.killed) {
+    scan.cancelled = true;
+    scan.child.kill("SIGTERM");
   }
 }
 
@@ -282,6 +347,117 @@ ipcMain.handle("files:list", async (event, directory) => {
   }
 });
 
+ipcMain.handle("nmap:preview", (event, request) => {
+  trusted(event);
+
+  try {
+    const args = nmapArguments(request);
+    return { ok: true, command: displayCommand(args) };
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
+});
+
+ipcMain.handle("nmap:start", async (event, request) => {
+  trusted(event);
+
+  if (nmapScan) {
+    return { ok: false, error: "A scan is already running." };
+  }
+
+  try {
+    const args = nmapArguments(request);
+    const child = spawn("nmap", args, {
+      shell: false,
+      windowsHide: true,
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    const scan = { child, cancelled: false };
+    nmapScan = scan;
+    let launched = false;
+    let resolveLaunch;
+    const launchResult = new Promise((resolve) => {
+      resolveLaunch = resolve;
+    });
+
+    child.stdout.on("data", (data) => {
+      if (nmapScan === scan) send("nmap:output", {
+        stream: "stdout",
+        text: data.toString()
+      });
+    });
+
+    child.stderr.on("data", (data) => {
+      if (nmapScan === scan) send("nmap:output", {
+        stream: "stderr",
+        text: data.toString()
+      });
+    });
+
+    child.on("error", (error) => {
+      if (nmapScan !== scan) return;
+
+      if (!launched) {
+        nmapScan = null;
+        resolveLaunch(error);
+        return;
+      }
+
+      nmapScan = null;
+      send("nmap:complete", {
+        ok: false,
+        error: error.code === "ENOENT"
+          ? "Nmap is not installed or is not available in PATH."
+          : error.message
+      });
+    });
+
+    child.once("spawn", () => {
+      launched = true;
+      resolveLaunch(null);
+    });
+
+    child.on("close", (code, signal) => {
+      if (nmapScan !== scan) return;
+      nmapScan = null;
+      send("nmap:complete", {
+        ok: code === 0,
+        code,
+        signal,
+        cancelled: scan.cancelled
+      });
+    });
+
+    const launchError = await launchResult;
+
+    if (launchError) {
+      return {
+        ok: false,
+        error: launchError.code === "ENOENT"
+          ? "Nmap is not installed or is not available in PATH."
+          : launchError.message
+      };
+    }
+
+    return {
+      ok: true,
+      command: displayCommand(args)
+    };
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
+});
+
+ipcMain.handle("nmap:cancel", (event) => {
+  trusted(event);
+
+  if (!nmapScan) return { ok: false, error: "No scan is running." };
+
+  nmapScan.cancelled = true;
+  nmapScan.child.kill("SIGTERM");
+  return { ok: true };
+});
+
 function createWindow() {
   window = new BrowserWindow({
     width: 1280,
@@ -311,10 +487,13 @@ function createWindow() {
   );
 
   window.webContents.on("did-start-loading", stopShell);
+  window.webContents.on("did-start-loading", stopNmap);
   window.webContents.on("render-process-gone", stopShell);
+  window.webContents.on("render-process-gone", stopNmap);
 
   window.on("closed", () => {
     stopShell();
+    stopNmap();
     window = null;
   });
 
@@ -329,7 +508,10 @@ app.whenReady().then(() => {
   });
 });
 
-app.on("before-quit", stopShell);
+app.on("before-quit", () => {
+  stopShell();
+  stopNmap();
+});
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {

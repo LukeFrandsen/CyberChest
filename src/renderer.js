@@ -400,15 +400,120 @@ if (!api || !window.Terminal || !window.FitAddon) {
   startTerminal();
 }
 
-// Nmap is still a placeholder.
-document.getElementById("scan-button").addEventListener(
-  "click",
-  () => {
-    const target = document.getElementById("scan-target")
-      .value.trim();
+const scanTarget = document.getElementById("scan-target");
+const scanType = document.getElementById("scan-type");
+const scanButton = document.getElementById("scan-button");
+const cancelScan = document.getElementById("cancel-scan");
+const scanCommand = document.getElementById("scan-command");
+const scanStatus = document.getElementById("scan-status");
+const scanOutput = document.getElementById("scan-output");
+let scanRunning = false;
+let previewVersion = 0;
 
-    document.getElementById("scan-output").textContent = target
-      ? "Target: " + target + "\nNmap execution is not connected yet."
-      : "Enter a target before starting the scan.";
+function scanRequest() {
+  return {
+    target: scanTarget.value,
+    preset: scanType.value,
+    options: {
+      skipDiscovery: document.getElementById("skip-discovery").checked,
+      traceroute: document.getElementById("traceroute").checked,
+      verbose: document.getElementById("verbose-scan").checked
+    }
+  };
+}
+
+async function updateCommandPreview() {
+  const version = ++previewVersion;
+
+  if (!scanTarget.value.trim()) {
+    scanCommand.textContent = "Enter a target to preview the command.";
+    return;
   }
-);
+
+  const response = await api.previewNmap(scanRequest());
+  if (version !== previewVersion) return;
+
+  scanCommand.textContent = response.ok
+    ? response.command
+    : response.error;
+}
+
+function setScanRunning(value) {
+  scanRunning = value;
+  scanButton.disabled = value;
+  cancelScan.disabled = !value;
+  scanTarget.disabled = value;
+  scanType.disabled = value;
+  document.querySelectorAll(".scan-options input").forEach((input) => {
+    input.disabled = value;
+  });
+}
+
+scanTarget.addEventListener("input", updateCommandPreview);
+scanType.addEventListener("change", updateCommandPreview);
+document.querySelectorAll(".scan-options input").forEach((input) => {
+  input.addEventListener("change", updateCommandPreview);
+});
+
+scanTarget.addEventListener("keydown", (event) => {
+  if (event.key === "Enter" && !scanRunning) scanButton.click();
+});
+
+scanButton.addEventListener("click", async () => {
+  if (scanRunning) return;
+
+  setScanRunning(true);
+  scanStatus.textContent = "Starting scan…";
+  scanOutput.textContent = "$ " + scanCommand.textContent + "\n\n";
+
+  const response = await api.startNmap(scanRequest());
+
+  if (!response.ok) {
+    setScanRunning(false);
+    scanStatus.textContent = response.error;
+    scanOutput.textContent = response.error;
+    return;
+  }
+
+  scanCommand.textContent = response.command;
+  scanStatus.textContent = "Scan running…";
+});
+
+cancelScan.addEventListener("click", async () => {
+  if (!scanRunning) return;
+  cancelScan.disabled = true;
+  scanStatus.textContent = "Stopping scan…";
+
+  const response = await api.cancelNmap();
+  if (!response.ok) scanStatus.textContent = response.error;
+});
+
+const nmapUnsubscribers = [
+  api.onNmapOutput(({ stream, text }) => {
+    scanOutput.textContent += stream === "stderr"
+      ? "[error] " + text
+      : text;
+    scanOutput.scrollTop = scanOutput.scrollHeight;
+  }),
+  api.onNmapComplete((result) => {
+    setScanRunning(false);
+
+    if (result.cancelled) {
+      scanStatus.textContent = "Scan cancelled.";
+      scanOutput.textContent += "\n[Scan cancelled]\n";
+    } else if (!result.ok && result.error) {
+      scanStatus.textContent = result.error;
+      scanOutput.textContent += "\n[Error] " + result.error + "\n";
+    } else if (result.ok) {
+      scanStatus.textContent = "Scan completed successfully.";
+    } else {
+      scanStatus.textContent = "Scan exited with code " + result.code + ".";
+    }
+  })
+];
+
+window.addEventListener("beforeunload", () => {
+  nmapUnsubscribers.forEach((unsubscribe) => unsubscribe());
+});
+
+updateCommandPreview();

@@ -41,5 +41,25 @@ contextBridge.exposeInMainWorld("cyberChest", {
 
   listDirectory: (directory) => {
     return ipcRenderer.invoke("files:list", directory);
+  },
+
+  previewNmap: (request) => {
+    return ipcRenderer.invoke("nmap:preview", request);
+  },
+
+  startNmap: (request) => {
+    return ipcRenderer.invoke("nmap:start", request);
+  },
+
+  cancelNmap: () => {
+    return ipcRenderer.invoke("nmap:cancel");
+  },
+
+  onNmapOutput: (callback) => {
+    return subscribe("nmap:output", callback);
+  },
+
+  onNmapComplete: (callback) => {
+    return subscribe("nmap:complete", callback);
   }
 });
