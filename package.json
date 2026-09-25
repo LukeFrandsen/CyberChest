@@ -4,21 +4,40 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
+    "dist": "electron-builder",
     "postinstall": "electron-rebuild -f -w node-pty",
     "rebuild": "electron-rebuild -f -w node-pty"
   },
   "keywords": [],
   "author": "Luke Frandsen",
   "license": "ISC",
-  "description": "Beginner-friendly desktop cybersecurity toolkit.",
+  "description": "Personal cybersecurity workspace for tools, projects, scans, and notes.",
   "dependencies": {
-    "@xterm/xterm": "^5.5.0",
     "@xterm/addon-fit": "^0.10.0",
+    "@xterm/xterm": "^5.5.0",
     "node-pty": "^1.1.0"
   },
   "devDependencies": {
+    "@electron/rebuild": "^4.0.1",
     "electron": "^44.4.1",
-    "@electron/rebuild": "^4.0.1"
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "com.lukefrandsen.cyberchest",
+    "productName": "CyberChest",
+
+    "mac": {
+      "target": "dmg"
+    },
+
+    "win": {
+      "target": "nsis"
+    },
+
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false
+    }
   },
   "repository": {
     "type": "git",

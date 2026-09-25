@@ -61,5 +61,15 @@ contextBridge.exposeInMainWorld("cyberChest", {
 
   onNmapComplete: (callback) => {
     return subscribe("nmap:complete", callback);
-  }
+  },
+
+  listProjects: () => ipcRenderer.invoke("projects:list"),
+  createProject: (input) => ipcRenderer.invoke("projects:create", input),
+  updateProject: (input) => ipcRenderer.invoke("projects:update", input),
+  projectDetails: (projectId) => ipcRenderer.invoke("projects:details", projectId),
+  openProjectFolder: (projectId) => ipcRenderer.invoke("projects:open-folder", projectId),
+  readNote: (input) => ipcRenderer.invoke("notes:read", input),
+  saveNote: (input) => ipcRenderer.invoke("notes:save", input),
+  saveCommand: (input) => ipcRenderer.invoke("projects:save-command", input),
+  saveScan: (input) => ipcRenderer.invoke("projects:save-scan", input)
 });

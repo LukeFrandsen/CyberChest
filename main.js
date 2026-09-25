@@ -1,4 +1,5 @@
-const { app, BrowserWindow, ipcMain } = require("electron");
+const { app, BrowserWindow, ipcMain, shell } = require("electron");
+const { randomUUID } = require("node:crypto");
 const path = require("node:path");
 const fs = require("node:fs/promises");
 const os = require("node:os");
@@ -6,6 +7,7 @@ const { execFile, spawn } = require("node:child_process");
 const { promisify } = require("node:util");
 const { pathToFileURL } = require("node:url");
 
+const { parseCommand } = require("./nmap-command");
 const runFile = promisify(execFile);
 const page = pathToFileURL(
   path.join(__dirname, "src/index.html")
@@ -17,6 +19,55 @@ let timer;
 let polling = false;
 let currentDirectory = os.homedir();
 let nmapScan;
+
+function projectsRoot() {
+  return path.join(app.getPath("documents"), "CyberChest", "projects");
+}
+
+function safeSegment(value, label = "Name") {
+  if (typeof value !== "string" || !value.trim() || value.includes("\0") ||
+      value.includes("/") || value.includes("\\") || value === "." || value === "..") {
+    throw new Error(label + " is invalid.");
+  }
+  return value.trim();
+}
+
+function projectPath(projectId) {
+  return path.join(projectsRoot(), safeSegment(projectId, "Project"));
+}
+
+function noteFilename(value) {
+  const name = safeSegment(value, "Note name");
+  return name.toLowerCase().endsWith(".md") ? name : name + ".md";
+}
+
+async function readJson(file, fallback) {
+  try {
+    return JSON.parse(await fs.readFile(file, "utf8"));
+  } catch (error) {
+    if (error.code === "ENOENT") return fallback;
+    throw error;
+  }
+}
+
+async function writeJson(file, value) {
+  await fs.writeFile(file, JSON.stringify(value, null, 2) + "\n", "utf8");
+}
+
+async function ensureProjectFolders(folder) {
+  await Promise.all([
+    fs.mkdir(path.join(folder, "notes"), { recursive: true }),
+    fs.mkdir(path.join(folder, "scans"), { recursive: true }),
+    fs.mkdir(path.join(folder, "files"), { recursive: true })
+  ]);
+}
+
+async function loadProject(projectId) {
+  const folder = projectPath(projectId);
+  const metadata = await readJson(path.join(folder, "project.json"), null);
+  if (!metadata) throw new Error("Project not found.");
+  return { folder, metadata };
+}
 
 const nmapPresets = Object.freeze({
   basic: [],
@@ -366,7 +417,9 @@ ipcMain.handle("nmap:start", async (event, request) => {
   }
 
   try {
-    const args = nmapArguments(request);
+    const parsed = request?.command !== undefined ? parseCommand(request.command) : { args: nmapArguments(request), sudo: false };
+    if (parsed.sudo) return { ok: true, terminal: true, command: parsed.terminalCommand };
+    const args = parsed.args;
     const child = spawn("nmap", args, {
       shell: false,
       windowsHide: true,
@@ -456,6 +509,162 @@ ipcMain.handle("nmap:cancel", (event) => {
   nmapScan.cancelled = true;
   nmapScan.child.kill("SIGTERM");
   return { ok: true };
+});
+
+ipcMain.handle("projects:list", async (event) => {
+  trusted(event);
+  try {
+    const root = projectsRoot();
+    await fs.mkdir(root, { recursive: true });
+    const entries = await fs.readdir(root, { withFileTypes: true });
+    const projects = [];
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const metadata = await readJson(path.join(root, entry.name, "project.json"), null);
+      if (metadata) projects.push(metadata);
+    }
+    projects.sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")));
+    return { ok: true, root, projects };
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
+});
+
+ipcMain.handle("projects:create", async (event, input) => {
+  trusted(event);
+  try {
+    const name = safeSegment(input?.name, "Project name");
+    const now = new Date().toISOString();
+    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 48);
+    const id = (slug || "project") + "-" + randomUUID().slice(0, 8);
+    const folder = projectPath(id);
+    await ensureProjectFolders(folder);
+    const metadata = {
+      id,
+      name,
+      description: String(input?.description || "").trim().slice(0, 1000),
+      target: String(input?.target || "").trim().slice(0, 253),
+      status: String(input?.status || "Active").trim().slice(0, 40),
+      createdAt: now,
+      updatedAt: now
+    };
+    await writeJson(path.join(folder, "project.json"), metadata);
+    await writeJson(path.join(folder, "commands.json"), []);
+    return { ok: true, project: metadata };
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
+});
+
+ipcMain.handle("projects:update", async (event, input) => {
+  trusted(event);
+  try {
+    const { folder, metadata } = await loadProject(input?.id);
+    const updated = {
+      ...metadata,
+      name: safeSegment(input?.name, "Project name"),
+      description: String(input?.description || "").trim().slice(0, 1000),
+      target: String(input?.target || "").trim().slice(0, 253),
+      status: String(input?.status || "Active").trim().slice(0, 40),
+      updatedAt: new Date().toISOString()
+    };
+    await writeJson(path.join(folder, "project.json"), updated);
+    return { ok: true, project: updated };
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
+});
+
+ipcMain.handle("projects:details", async (event, projectId) => {
+  trusted(event);
+  try {
+    const { folder, metadata } = await loadProject(projectId);
+    await ensureProjectFolders(folder);
+    const noteEntries = await fs.readdir(path.join(folder, "notes"), { withFileTypes: true });
+    const scanEntries = await fs.readdir(path.join(folder, "scans"), { withFileTypes: true });
+    const commands = await readJson(path.join(folder, "commands.json"), []);
+    return {
+      ok: true,
+      project: metadata,
+      folder,
+      notes: noteEntries.filter((entry) => entry.isFile() && entry.name.endsWith(".md")).map((entry) => entry.name).sort(),
+      scans: scanEntries.filter((entry) => entry.isFile()).map((entry) => entry.name).sort().reverse(),
+      commands
+    };
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
+});
+
+ipcMain.handle("projects:open-folder", async (event, projectId) => {
+  trusted(event);
+  try {
+    const { folder } = await loadProject(projectId);
+    const error = await shell.openPath(folder);
+    return error ? { ok: false, error } : { ok: true };
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
+});
+
+ipcMain.handle("notes:read", async (event, input) => {
+  trusted(event);
+  try {
+    const { folder } = await loadProject(input?.projectId);
+    const name = noteFilename(input?.name);
+    const content = await fs.readFile(path.join(folder, "notes", name), "utf8");
+    return { ok: true, name, content };
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
+});
+
+ipcMain.handle("notes:save", async (event, input) => {
+  trusted(event);
+  try {
+    const { folder, metadata } = await loadProject(input?.projectId);
+    const name = noteFilename(input?.name);
+    const content = String(input?.content || "");
+    if (content.length > 5_000_000) throw new Error("Note is too large.");
+    await fs.writeFile(path.join(folder, "notes", name), content, "utf8");
+    metadata.updatedAt = new Date().toISOString();
+    await writeJson(path.join(folder, "project.json"), metadata);
+    return { ok: true, name };
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
+});
+
+ipcMain.handle("projects:save-command", async (event, input) => {
+  trusted(event);
+  try {
+    const { folder } = await loadProject(input?.projectId);
+    const command = String(input?.command || "").trim();
+    if (!command || command.length > 4000) throw new Error("Command is invalid.");
+    const file = path.join(folder, "commands.json");
+    const commands = await readJson(file, []);
+    commands.unshift({ id: randomUUID(), command, description: String(input?.description || "").trim().slice(0, 500), createdAt: new Date().toISOString() });
+    await writeJson(file, commands.slice(0, 500));
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
+});
+
+ipcMain.handle("projects:save-scan", async (event, input) => {
+  trusted(event);
+  try {
+    const { folder } = await loadProject(input?.projectId);
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const target = String(input?.target || "scan").replace(/[^A-Za-z0-9._-]+/g, "-").slice(0, 50) || "scan";
+    const name = timestamp + "-" + target + ".txt";
+    const body = ["CyberChest Nmap Scan", "Saved: " + new Date().toISOString(), "Command: " + String(input?.command || ""), "", String(input?.output || "")].join("\n");
+    if (body.length > 20_000_000) throw new Error("Scan output is too large.");
+    await fs.writeFile(path.join(folder, "scans", name), body, "utf8");
+    return { ok: true, name };
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
 });
 
 function createWindow() {
