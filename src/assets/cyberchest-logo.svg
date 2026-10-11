@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+<!-- Temporary chest mark; replace with the approved generated CyberChest logo. -->
+<path d="M8 28C8 17 17 10 32 10s24 7 24 18v23a4 4 0 0 1-4 4H12a4 4 0 0 1-4-4Z" fill="#171310" stroke="#c65b27" stroke-width="2.5"/>
+<path d="M9 29h46M19 13v41M45 13v41" stroke="#c65b27" stroke-width="2"/>
+<path d="M27 33v-5a5 5 0 0 1 10 0v5" stroke="#ff8a3d" stroke-width="3" stroke-linecap="round"/>
+<rect x="24" y="33" width="16" height="14" rx="3" fill="#ff8a3d"/>
+<path d="M32 37a2 2 0 0 0-1 3.73V43h2v-2.27A2 2 0 0 0 32 37Z" fill="#171310"/>
+<path d="M12 49h3m34 0h3" stroke="#ff8a3d" stroke-width="2" stroke-linecap="round"/>
+</svg>

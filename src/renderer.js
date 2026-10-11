@@ -7,7 +7,12 @@ let currentNote = "";
 let noteDirty = false;
 
 function switchTool(tool) {
-  document.querySelectorAll(".tool-tab[data-tool]").forEach((tab) => tab.classList.toggle("active", tab.dataset.tool === tool));
+  document.querySelectorAll(".tool-tab[data-tool]").forEach((tab) => {
+    const selected = tab.dataset.tool === tool;
+    tab.classList.toggle("active", selected);
+    if (selected) tab.setAttribute("aria-current", "page");
+    else tab.removeAttribute("aria-current");
+  });
   document.querySelectorAll(".tool-workspace").forEach((panel) => panel.classList.toggle("active", panel.id === tool + "-workspace"));
   const contexts = { terminal: "file-tree", nmap: "network-tree", projects: "project-context", notes: "notes-context" };
   document.querySelectorAll(".context-content").forEach((panel) => panel.classList.toggle("active", panel.id === contexts[tool]));
@@ -176,7 +181,7 @@ async function resetTree(){generation++;nodes.clear();tree.replaceChildren();cre
 byId("reveal-folder").addEventListener("click",()=>revealDirectory(true));byId("refresh-tree").addEventListener("click",resetTree);showHidden.addEventListener("change",resetTree);
 async function startTerminal(){if(!api||!term||running||starting)return;starting=true;terminalStatus.textContent="Starting shell…";try{const response=await api.startShell();if(!response.ok)throw new Error(response.error);running=true;directory=response.directory;terminalStatus.textContent="Shell running";resizeTerminal();await resetTree();term.focus();}catch(error){terminalStatus.textContent="Shell could not start";term.writeln("\r\n"+error.message.replace(/\n/g,"\r\n"));}finally{starting=false;}}
 byId("restart-terminal").addEventListener("click",()=>{if(!running)startTerminal();});
-if(!api||!window.Terminal||!window.FitAddon){terminalStatus.textContent="Open with npm start after running npm install.";}else{term=new Terminal({cursorBlink:true,fontSize:14,fontFamily:"Menlo, Monaco, Consolas, monospace",scrollback:5000,theme:{background:"#05090d",foreground:"#b7f7d2",cursor:"#31d983"}});fit=new FitAddon.FitAddon();term.loadAddon(fit);term.open(byId("terminal-screen"));const unsub=[api.onData((data)=>term.write(data)),api.onExit((code)=>{running=false;terminalStatus.textContent="Shell exited ("+code+")";}),api.onDirectory(({directory:next})=>{directory=next;markDirectory();revealDirectory();}),api.onDirectoryError((message)=>fileStatus.textContent=message)];term.onData((data)=>{if(running)for(let i=0;i<data.length;i+=16384)api.writeShell(data.slice(i,i+16384));});const observer=new ResizeObserver(resizeTerminal);observer.observe(byId("terminal-screen"));window.addEventListener("beforeunload",()=>{observer.disconnect();unsub.forEach((fn)=>fn());term.dispose();});startTerminal();}
+if(!api||!window.Terminal||!window.FitAddon){terminalStatus.textContent="Open with npm start after running npm install.";}else{term=new Terminal({cursorBlink:true,fontSize:14,fontFamily:"Menlo, Monaco, Consolas, monospace",scrollback:5000,theme:{background:"#050505",foreground:"#ead5c6",cursor:"#ff8a3d",selectionBackground:"#7a351580"}});fit=new FitAddon.FitAddon();term.loadAddon(fit);term.open(byId("terminal-screen"));const unsub=[api.onData((data)=>term.write(data)),api.onExit((code)=>{running=false;terminalStatus.textContent="Shell exited ("+code+")";}),api.onDirectory(({directory:next})=>{directory=next;markDirectory();revealDirectory();}),api.onDirectoryError((message)=>fileStatus.textContent=message)];term.onData((data)=>{if(running)for(let i=0;i<data.length;i+=16384)api.writeShell(data.slice(i,i+16384));});const observer=new ResizeObserver(resizeTerminal);observer.observe(byId("terminal-screen"));window.addEventListener("beforeunload",()=>{observer.disconnect();unsub.forEach((fn)=>fn());term.dispose();});startTerminal();}
 
 const scanTarget=byId("scan-target"),scanType=byId("scan-type"),scanButton=byId("scan-button"),cancelScan=byId("cancel-scan"),scanCommand=byId("scan-command"),scanStatus=byId("scan-status"),scanOutput=byId("scan-output");let scanRunning=false,previewVersion=0,scanCompleted=false,commandEdited=false,lastScanCommand="",lastScanTarget="";
 const explanations={basic:"A balanced first look using Nmap's default selection of common ports.",quick:"A faster scan of fewer common ports using -T4 and -F.",service:"Adds -sV to identify services and version information on open ports.",ports:"Adds -p- to test every TCP port; this can take considerably longer.","operating-system":"Adds -O to estimate the operating system; elevated privileges may be required."};
