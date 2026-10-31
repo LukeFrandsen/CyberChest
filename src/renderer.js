@@ -14,7 +14,7 @@ function switchTool(tool) {
     else tab.removeAttribute("aria-current");
   });
   document.querySelectorAll(".tool-workspace").forEach((panel) => panel.classList.toggle("active", panel.id === tool + "-workspace"));
-  const contexts = { terminal: "file-tree", nmap: "network-tree", projects: "project-context", notes: "notes-context" };
+  const contexts = { wireshark: "wireshark-context", terminal: "file-tree", nmap: "network-tree", projects: "project-context", notes: "notes-context" };
   document.querySelectorAll(".context-content").forEach((panel) => panel.classList.toggle("active", panel.id === contexts[tool]));
   if (tool === "terminal") requestAnimationFrame(() => { resizeTerminal(); term?.focus(); });
   if (tool === "notes") loadNotesForProject();

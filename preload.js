@@ -11,6 +11,13 @@ function subscribe(channel, callback) {
 }
 
 contextBridge.exposeInMainWorld("cyberChest", {
+  detectTshark: () => ipcRenderer.invoke('wireshark:detect'),
+  startCapture: (request) => ipcRenderer.invoke('wireshark:start', request),
+  stopCapture: () => ipcRenderer.invoke('wireshark:stop'),
+  loadCapture: () => ipcRenderer.invoke('wireshark:load'),
+  saveCapture: () => ipcRenderer.invoke('wireshark:save'),
+  onPackets: (callback) => subscribe('wireshark:packets', callback),
+  onCaptureComplete: (callback) => subscribe('wireshark:complete', callback),
   startShell: () => {
     return ipcRenderer.invoke("shell:start");
   },

@@ -184,3 +184,14 @@ input[type="checkbox"] { accent-color: var(--orange); }
   .header-actions { flex-wrap: wrap; }
 }
 @media (max-height: 650px) { .workspace-header { margin-bottom: 12px; padding-bottom: 12px; } .tool-workspace { padding-top: 18px; } }
+
+.capture-toolbar{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+.capture-toolbar select{flex:1;min-width:120px}
+#ws-capture-filter{display:block;width:100%;margin-top:8px}
+#ws-search{width:65%;padding:7px}
+#ws-count{padding:0 12px 10px}
+.packet-scroll{overflow:auto;flex:1;min-height:0}
+.packet-table{border-collapse:collapse;width:100%;font:11px Menlo,monospace;text-align:left}
+.packet-table th{position:sticky;top:0;background:var(--panel2);color:var(--accent)}
+.packet-table th,.packet-table td{padding:7px 9px;border-bottom:1px solid var(--border);white-space:nowrap;max-width:500px;overflow:hidden;text-overflow:ellipsis}
+.packet-table tr:hover{background:var(--accent2)}
