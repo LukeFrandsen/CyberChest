@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell } = require("electron");
+const { app, BrowserWindow, ipcMain, shell, dialog } = require("electron");
 const { randomUUID } = require("node:crypto");
 const path = require("node:path");
 const fs = require("node:fs/promises");
@@ -19,6 +19,28 @@ let timer;
 let polling = false;
 let currentDirectory = os.homedir();
 let nmapScan;
+const { Capture } = require('./wireshark');
+const capture = new Capture(send);
+for (const action of ['detect', 'start', 'stop', 'load', 'save']) {
+  ipcMain.handle('wireshark:' + action, async (event, request) => {
+    trusted(event);
+    try {
+      if (action === 'detect') return { ok: true, ...await capture.interfaces() };
+      if (action === 'start') await capture.start(request);
+      if (action === 'stop') await capture.stop();
+      if (action === 'load' || action === 'save') {
+        if (capture.active || capture.busy) throw new Error('Stop the capture first.');
+        const result = action === 'load'
+          ? await dialog.showOpenDialog(window, { properties: ['openFile'], filters: [{ name: 'Packet captures', extensions: ['pcapng', 'pcap', 'cap'] }] })
+          : await dialog.showSaveDialog(window, { defaultPath: 'capture.pcapng', filters: [{ name: 'PCAPNG capture', extensions: ['pcapng'] }] });
+        if (result.canceled) return { ok: true, cancelled: true };
+        if (action === 'load') await capture.load(result.filePaths[0]);
+        else await capture.save(result.filePath);
+      }
+      return { ok: true };
+    } catch (error) { return { ok: false, error: error.message }; }
+  });
+}
 
 function projectsRoot() {
   return path.join(app.getPath("documents"), "CyberChest", "projects");
@@ -697,12 +719,15 @@ function createWindow() {
 
   window.webContents.on("did-start-loading", stopShell);
   window.webContents.on("did-start-loading", stopNmap);
+  window.webContents.on("did-start-loading", () => capture.cleanup().catch(console.error));
   window.webContents.on("render-process-gone", stopShell);
   window.webContents.on("render-process-gone", stopNmap);
+  window.webContents.on("render-process-gone", () => capture.cleanup().catch(console.error));
 
   window.on("closed", () => {
     stopShell();
     stopNmap();
+    capture.cleanup().catch(console.error);
     window = null;
   });
 
@@ -717,7 +742,12 @@ app.whenReady().then(() => {
   });
 });
 
-app.on("before-quit", () => {
+let captureQuit = false;
+app.on("before-quit", (event) => {
+  if (!captureQuit) {
+    event.preventDefault();
+    capture.cleanup().catch(console.error).finally(() => { captureQuit = true; app.quit(); });
+  }
   stopShell();
   stopNmap();
 });
